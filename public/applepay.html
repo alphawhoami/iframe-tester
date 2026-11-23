@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Apple Pay in an iframe – test page</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono&family=IBM+Plex+Sans:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f3f4f7;--surface:#fff;--text:#1a1f2b;--muted:#5b6474;--line:#d9dde4;--accent:#2457c5;--on-accent:#fff;--ok:#1f7a4d;--bad:#b3261e;color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--bg:#12151b;--surface:#1b1f27;--text:#e6e9ef;--muted:#9aa3b2;--line:#2c323d;--accent:#7fa2f0;--on-accent:#0f1626;--ok:#5cc28e;--bad:#f08a80;color-scheme:dark}}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{display:flex;flex-direction:column;background:var(--bg);color:var(--text);font:15px/1.5 "IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif}
+header{display:flex;flex-wrap:wrap;gap:6px 24px;align-items:baseline;justify-content:space-between;padding:16px 20px 10px}
+h1{margin:0;font-size:18px;font-weight:600}
+.origin{color:var(--muted)}
+code,input[type=url],#log,#result dd{font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace}
+.origin code{color:var(--text)}
+.checks{display:flex;flex-wrap:wrap;gap:4px 18px;margin:0;padding:0 20px 12px;list-style:none;color:var(--muted);font-size:14px}
+.checks b{font-weight:600}
+.yes{color:var(--ok)}.no{color:var(--bad)}
+.hint{max-width:80ch;margin:0;padding:0 20px 12px;color:var(--muted);font-size:14px}
+form{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:0 20px 12px}
+input[type=url]{flex:1 1 320px;min-width:0;padding:9px 12px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--text);font-size:14px}
+.auto{display:flex;flex-basis:100%;gap:8px;align-items:center;color:var(--muted);font-size:14px}
+.auto input{margin:0;accent-color:var(--accent)}
+button{padding:9px 14px;border:1px solid var(--accent);border-radius:6px;background:var(--accent);color:var(--on-accent);font:inherit;font-weight:600;cursor:pointer}
+button.secondary{background:transparent;color:var(--accent)}
+button.link{padding:0 6px;border:0;background:none;color:var(--accent);font-weight:400}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+#result{margin:0 20px 12px;padding:12px 16px;border:1px solid var(--ok);border-left-width:4px;border-radius:8px;background:var(--surface)}
+#result.warn{border-color:var(--bad)}
+#result h2{margin:0 0 8px;font-size:15px;font-weight:600}
+#result dl{display:grid;grid-template-columns:max-content 1fr;gap:2px 14px;margin:0 0 12px;font-size:14px}
+#result dt{color:var(--muted)}
+#result dd{margin:0;word-break:break-all}
+.actions{display:flex;flex-wrap:wrap;gap:8px}
+main{flex:1;display:flex;min-height:420px;margin:0 20px;border:1px solid var(--line);border-radius:8px;background:var(--surface);overflow:hidden}
+iframe{flex:1;width:100%;border:0;background:#fff}
+.empty{max-width:60ch;margin:auto;padding:24px;color:var(--muted);text-align:center}
+details{margin:12px 20px 20px;font-size:14px}
+summary{color:var(--muted);cursor:pointer}
+#log{max-height:200px;margin:8px 0 0;padding:10px 12px;overflow:auto;border:1px solid var(--line);border-radius:6px;background:var(--surface);font-size:12.5px;line-height:1.45;white-space:pre-wrap;word-break:break-all}
+</style>
+</head>
+<body>
+<header>
+  <h1>Apple Pay in an iframe – test page</h1>
+  <div class="origin">Origin to whitelist: <code id="origin"></code><button class="link" type="button" id="copy">Copy</button></div>
+</header>
+<ul class="checks" aria-label="Checks on this page">
+  <li>HTTPS: <b id="c-secure">…</b></li>
+  <li>Browser supports Apple Pay: <b id="c-session">…</b></li>
+  <li>Device can make Apple Pay payments: <b id="c-can">…</b></li>
+  <li>Domain verification file: <b id="c-file">…</b></li>
+</ul>
+<p class="hint" id="hint" hidden>Apple Pay is not ready here yet. In Safari, allow websites to check for Apple Pay (Settings → Advanced), and make sure Touch ID is reachable, not a closed lid with an external monitor.</p>
+<form id="f" novalidate>
+  <input id="url" type="url" placeholder="Paste the redirect_url from the purchase response" aria-label="redirect_url from the purchase response" autocomplete="off">
+  <button type="submit">Load in iframe</button>
+  <button type="button" class="secondary" id="top">Open outside iframe</button>
+  <label class="auto"><input type="checkbox" id="auto">After payment completes, redirect the whole page right away, as the shop would</label>
+</form>
+<section id="result" hidden aria-live="polite">
+  <h2>Payment page sent a redirect</h2>
+  <dl>
+    <dt>transaction_status</dt><dd id="r-status">–</dd>
+    <dt>transaction_id</dt><dd id="r-trx">–</dd>
+    <dt>order_id</dt><dd id="r-order">–</dd>
+    <dt>Target URL</dt><dd id="r-url"></dd>
+    <dt>Sender</dt><dd id="r-origin"></dd>
+  </dl>
+  <div class="actions">
+    <button type="button" id="r-go">Go to target URL</button>
+    <button type="button" class="secondary" id="r-copy">Copy URL</button>
+  </div>
+</section>
+<main id="wrap">
+  <p class="empty">Paste the redirect_url from the purchase response as received. The page appends /iframe itself, as Paypipes requires. If the iframe stays blank, the payment page most likely does not allow embedding from this domain yet.</p>
+</main>
+<details>
+  <summary>Log (messages from iframe: <span id="count">0</span>)</summary>
+  <pre id="log"></pre>
+</details>
+<script>
+const $ = id => document.getElementById(id);
+const mark = (id, ok, yes = 'yes', no = 'no') => { const el = $(id); el.textContent = ok ? yes : no; el.className = ok ? 'yes' : 'no'; };
+const log = text => { $('log').textContent += `[${new Date().toLocaleTimeString('en-GB')}] ${text}\n`; };
+let frameOrigin = null;
+let lastRedirect = null;
+
+async function copyText(button, text) {
+  const label = button.textContent;
+  try { await navigator.clipboard.writeText(text); button.textContent = 'Copied'; }
+  catch { button.textContent = 'Copy failed'; }
+  setTimeout(() => { button.textContent = label; }, 1500);
+}
+
+$('origin').textContent = location.origin;
+$('copy').addEventListener('click', () => copyText($('copy'), location.origin));
+
+mark('c-secure', window.isSecureContext);
+const hasSession = 'ApplePaySession' in window;
+mark('c-session', hasSession);
+let can = false;
+try { can = hasSession && ApplePaySession.canMakePayments(); } catch {}
+mark('c-can', can);
+if (!can) $('hint').hidden = false;
+
+fetch('/.well-known/apple-developer-merchantid-domain-association', { cache: 'no-store' })
+  .then(r => (r.ok ? r.text() : ''))
+  .then(t => mark('c-file', t.trim().length > 0, 'found', 'missing'))
+  .catch(() => mark('c-file', false, 'found', 'missing'));
+
+$('url').addEventListener('input', () => $('url').setCustomValidity(''));
+function readUrl() {
+  const input = $('url');
+  input.value = input.value.trim().replace(/^["']+|["']+$/g, '');
+  let url = null;
+  try { url = new URL(input.value); } catch {}
+  if (!url || url.protocol !== 'https:') { input.setCustomValidity('Enter an address starting with https://'); input.reportValidity(); return null; }
+  return url;
+}
+const isRedirect = url => /\/redirect\/[^/]+(\/iframe)?\/?$/.test(url.pathname);
+function toIframeUrl(url) {
+  const u = new URL(url);
+  if (isRedirect(u) && !/\/iframe\/?$/.test(u.pathname)) u.pathname = u.pathname.replace(/\/$/, '') + '/iframe';
+  return u;
+}
+function toTopUrl(url) {
+  const u = new URL(url);
+  if (isRedirect(u)) u.pathname = u.pathname.replace(/\/iframe\/?$/, '');
+  return u;
+}
+
+$('f').addEventListener('submit', e => {
+  e.preventDefault();
+  const url = readUrl();
+  if (!url) return;
+  if (!isRedirect(url)) log('Address does not look like a Paypipes redirect_url; not appending /iframe.');
+  const src = toIframeUrl(url);
+  frameOrigin = src.origin;
+  $('result').hidden = true;
+  const frame = document.createElement('iframe');
+  frame.title = 'Payment page';
+  frame.setAttribute('allow', 'payment *');
+  frame.src = src.href;
+  $('wrap').replaceChildren(frame);
+  log(`Loading in iframe: ${src.href}`);
+});
+
+$('top').addEventListener('click', () => {
+  const url = readUrl();
+  if (!url) return;
+  const target = toTopUrl(url);
+  window.open(target.href, '_blank', 'noopener');
+  log(`Opened outside iframe: ${target.href}`);
+});
+
+function showResult(target, origin, trusted) {
+  lastRedirect = target.href;
+  const p = target.searchParams;
+  $('r-status').textContent = p.get('transaction_status') || '–';
+  $('r-trx').textContent = p.get('transaction_id') || '–';
+  $('r-order').textContent = p.get('order_id') || '–';
+  $('r-url').textContent = target.href;
+  $('r-origin').textContent = trusted ? origin : `${origin} (different origin than the iframe; will not redirect automatically)`;
+  $('result').classList.toggle('warn', !trusted);
+  $('result').hidden = false;
+}
+$('r-go').addEventListener('click', () => { if (lastRedirect) window.location.href = lastRedirect; });
+$('r-copy').addEventListener('click', () => { if (lastRedirect) copyText($('r-copy'), lastRedirect); });
+
+let count = 0;
+window.addEventListener('message', e => {
+  $('count').textContent = ++count;
+  let text;
+  try { text = typeof e.data === 'string' ? e.data : JSON.stringify(e.data); } catch { text = String(e.data); }
+  log(`Message from ${e.origin}: ${text}`);
+
+  const d = e.data;
+  if (!d || d.type !== 'redirect' || typeof d.url !== 'string') return;
+  let target;
+  try { target = new URL(d.url); } catch { log('Redirect ignored: target URL cannot be parsed.'); return; }
+  if (target.protocol !== 'https:' && target.protocol !== 'http:') { log(`Redirect ignored: disallowed protocol ${target.protocol}`); return; }
+  const trusted = e.origin === frameOrigin;
+  showResult(target, e.origin, trusted);
+  if (trusted && $('auto').checked) { log(`Redirecting to ${target.href}`); window.location.href = target.href; }
+});
+</script>
+</body>
+</html>
